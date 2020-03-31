@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.neighbors import KDTree
-from scipy import interpolate
+from scipy import spatial
 from tqdm import tqdm
 
 
@@ -28,15 +28,13 @@ def stitch_regions(
 
     slopes_intra = heights / spans
 
+    # start with the region with the largest span
     init_label = all_labels[np.argmax(spans)]
-    # print(init_label)
-
     ground_mask[region_labels == init_label] = 1
-    # print(np.sum(ground_mask))
 
     # computing slopes inter
     coords_ground = coords[ground_mask]
-    # print(coords_ground.shape)
+
     tree = KDTree(coords_ground)
     for i, label in enumerate(
         tqdm(all_labels, desc="* Stitching regions together")
@@ -47,9 +45,7 @@ def stitch_regions(
         if slopes_intra[i] > slope_intra_max:
             continue
 
-        # print("*****")
         coords_label = coords[region_labels == label]
-        # print(len(coords_label))
         dist, idx = tree.query(coords_label, k=1)
         idx = idx.ravel()
         dist = dist.ravel()
@@ -57,7 +53,6 @@ def stitch_regions(
         mask_closest = dist < np.percentile(dist, 100 * percentile_closest)
         if np.sum(mask_closest) == 0:
             continue
-        # print(np.sum(mask_closest))
         coords_label_closest = coords_label[mask_closest]
 
         idx_ground_closest = idx[mask_closest]
@@ -79,101 +74,83 @@ def stitch_regions(
     return ground_mask
 
 
-# def interpolate_altitude(coords_ground, coords_queries_xy, k, step):
-# tree = KDTree(coords_ground[:, :2])
+def interpolate_altitude(coords_ground, coords_queries_xy, method="delaunay"):
 
-# dist, idx = tree.query(coords_queries_xy, k=k)
-# inv_dist = 1 / (1e-3 + dist)
-# weights = inv_dist / np.sum(inv_dist, axis=1).reshape(-1, 1)
+    if method == "closest_neighbor":
+        # create a KD tree on xy coordinates
+        tree = KDTree(coords_ground[:, :2])
 
-# ground_z = coords_ground[:, -1]
-# altitude_queries = np.sum(ground_z[idx] * weights, axis=1)
-# pairs_ground = (coords_ground[:, :2] // step).astype(np.int16)
-# ranges = np.max(coords_ground, axis=0) - np.min(coords_ground, axis=0)
-# idx_max = (ranges // step).astype(int)
-# print(idx_max)
+        # find closest neighbor on the ground
+        _, idx_neighbor = tree.query(coords_queries_xy, k=1)
+        idx_neighbor = idx_neighbor.flatten()
 
-# print(step)
-# altitudes = np.zeros(idx_max[:2])
-# z_values = coords_ground[:, -1].astype(np.float32)
-# unique_pairs = np.unique(pairs_ground, axis=0)
-# heights = np.zeros(len(unique_pairs))
-# for i, pair in enumerate(tqdm(unique_pairs)):
-#     # print(pair)
-#     mask = np.all(pairs_ground == pair, axis=1)
-#     # selec = z_values[mask]
-#     # print(pairs_ground[mask])
-#     # print(selec.shape)
-#     avg = np.mean(z_values[mask])
-#     # altitudes[tuple(pair)] = avg
-#     heights[i] = avg
-#     # break
-# print(altitudes.shape)
-# tuples = tuple([unique_pairs[:, 0], unique_pairs[:, 1]])
-# altitudes[tuples] = heights
-# import matplotlib.pyplot as plt
+        z_ground = coords_ground[:, -1]
+        z_queries = z_ground[idx_neighbor]
+        grid_3d = np.hstack((coords_queries_xy, z_queries.reshape(-1, 1)))
 
-# xx, yy = np.mgrid[:idx_max[0], :idx_max[1]]
-# print(xx.shape)
-# grid = interpolate.griddata(unique_pairs, heights, (xx, yy))
+    elif method == "delaunay":
+        # create 2D triangulation of ground coordinates
+        tri = spatial.Delaunay(coords_ground[:, :2])
 
+        # Find simplex of each query point
+        idx_simplices = tri.find_simplex(coords_queries_xy)
+        convex_hull_mask = idx_simplices >= 0
 
-# f = interpolate.interp2d(unique_pairs[:, 0], unique_pairs[:, 1], heights)
+        # keep only query points inside convex hull
+        idx_simplices = idx_simplices[convex_hull_mask]
+        coords_queries_hull = coords_queries_xy[convex_hull_mask]
 
-# pairs_queries = np.unique(
-#     (coords_queries_xy // step).astype(int), axis=0
-# )
-# # missing =
-# altitude_queries = f(pairs_queries[:, 0], pairs_queries[:, 1])
-# tuples_queries = tuple([altitude_queries[:, 0], altitude_queries[:, 1]])
-# print(altitude_queries.shape)
-# altitudes[tuples_queries] = altitude_queries
-# plt.matshow(grid)
-# plt.show()
+        # compute weights
+        trans = tri.transform[idx_simplices]
+        inv_T = trans[:, :-1, :]
+        r = trans[:, -1, :]
+        diff = (coords_queries_hull - r)[:, :, np.newaxis]
+        barycent = (inv_T @ diff).squeeze()
+        weights = np.c_[barycent, 1 - barycent.sum(axis=1)]
 
-# return altitude_queries
+        # interpolate z values of vertices
+        z_vertices = coords_ground[:, -1][tri.simplices][idx_simplices]
+        z_queries = np.sum(weights * z_vertices, axis=1)
+        grid_3d = np.hstack((coords_queries_hull, z_queries.reshape(-1, 1)))
+
+    else:
+        raise ValueError(f"Method '{method}' not found")
+
+    return grid_3d
 
 
-def interpolate_altitude(coords_ground, coords_queries_xy):
-
-    # create a KD tree on xy coordinates
-    tree = KDTree(coords_ground[:, :2])
-
-    # find closest neighbor on the ground
-    _, idx = tree.query(coords_queries_xy, k=1)
-    idx = idx.flatten()
-
-    ground_z = coords_ground[:, -1]
-    altitude_queries = ground_z[idx]
-
-    return altitude_queries
-
-
-def height_above_ground(coords, ground_mask):
-    heights = np.zeros(len(coords), dtype=np.float32)
-
-    coords_ground = coords[ground_mask]
-    coords_queries = coords[~ground_mask]
-
-    altitude_queries = interpolate_altitude(
-        coords_ground, coords_queries[:, :2]
-    )
-    heights[~ground_mask] = coords_queries[:, -1] - altitude_queries
-
-    return heights
-
-
-def rasterize_ground(coords, ground_mask, step):
+def rasterize_ground(coords, ground_mask, step_size, method):
+    print(f"* method : {method}")
+    print(f"* step_size : {step_size}")
     mins = np.min(coords[:, :2], axis=0)
     maxs = np.max(coords[:, :2], axis=0)
 
     # Create a grid
-    grid = np.mgrid[mins[0] : maxs[0] : step, mins[1] : maxs[1] : step].T
+    grid = np.mgrid[
+        mins[0] : maxs[0] : step_size, mins[1] : maxs[1] : step_size
+    ].T
     grid_points = grid.reshape(-1, 2)
 
     # Interpolate altitudes
-    grid_altitudes = interpolate_altitude(coords[ground_mask], grid_points)
-
-    grid_3d = np.hstack((grid_points, grid_altitudes.reshape(-1, 1)))
+    grid_3d = interpolate_altitude(coords[ground_mask], grid_points, method)
 
     return grid_3d
+
+
+def height_above_ground(coords, ground_mask, grid_ground_3d):
+    heights = np.zeros(len(coords), dtype=np.float32)
+
+    coords_queries = coords[~ground_mask]
+
+    tree = KDTree(grid_ground_3d[:, :2])
+
+    # find closest neighbor on the rasterized ground
+    _, idx_neighbor = tree.query(coords_queries[:, :2], k=1)
+    idx_neighbor = idx_neighbor.flatten()
+
+    # set heights
+    z_ground = grid_ground_3d[:, -1]
+    z_queries_ground = z_ground[idx_neighbor]
+    heights[~ground_mask] = coords_queries[:, -1] - z_queries_ground
+
+    return heights

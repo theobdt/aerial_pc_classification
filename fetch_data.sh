@@ -1,12 +1,15 @@
 #! /bin/bash
+echo "To download data, please request access at http://www2.isprs.org/commissions/comm3/wg4/detection-and-reconstruction.html (it is totally free).\n"
+echo -n "Login: "; read login
+echo -n "Password: "; stty -echo; read passwd; stty echo; echo
+
+URL_TRAIN="ftp://ftp.ipi.uni-hannover.de/ISPRS_BENCHMARK_DATASETS/Vaihingen/3DLabeling/Vaihingen3D_Traininig.pts"
+URL_TEST="ftp://ftp.ipi.uni-hannover.de/ISPRS_BENCHMARK_DATASETS/Vaihingen/3DLabeling/Vaihingen3D_EVAL_WITH_REF.pts.gz"
+PATH_TRAIN_DL="data/vaihingen3D_train.pts"
+PATH_TEST_DL="data/vaihingen3D_test.pts"
 
 mkdir -p data
-#download data from google drive
-function gdrive_download () {
-  CONFIRM=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate "https://docs.google.com/uc?export=download&id=$1" -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')
-  wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$CONFIRM&id=$1" -O $2
-  rm -rf /tmp/cookies.txt
-}
-echo "Fetching data.."
-gdrive_download 15dUAvbDdq0tMUgIE9jEc3SV9cQGVYO05 data/vaihingen.zip && \
-    echo "Data successfully downloaded to data/vaihingen.zip"
+wget --user="$login" --password="$passwd" "$URL_TRAIN" -O "$PATH_TRAIN_DL" && \
+    echo "Downloaded training data to $PATH_TRAIN_DL"
+wget --user="$login" --password="$passwd" "$URL_TEST" -O - | gzip -cd > "$PATH_TEST_DL" && \
+    echo "Downloaded test data to $PATH_TEST_DL"

@@ -19,12 +19,16 @@ DESCRIPTORS = [
     "curvature",
 ]
 
+METHODS_RASTERIZATION = ["closest_neighbor", "delaunay"]
 
-def compute_features(data, steps):
 
+def compute_features(path_ply, steps):
+    filename = os.path.split(path_ply)[-1]
+
+    data = ply2dict(path_ply)
     coords = np.vstack((data["x"], data["y"], data["z"])).T
-    ground_only = None
-    ground_rasterized = None
+
+    grid_ground_3d = None
 
     for (step, params) in steps.items():
         if step == "descriptors":
@@ -66,34 +70,65 @@ def compute_features(data, steps):
             ground_mask = ground_extraction.stitch_regions(
                 coords, region_labels, **params
             )
+
             ground_only = {
                 field: data[field][ground_mask] for field in list(data.keys())
             }
+
             data["ground"] = ground_mask.astype(np.uint8)
 
+            path_ground = os.path.join(PATH_GROUND_ONLY, filename)
+            if dict2ply(ground_only, path_ground):
+                print(f"* PLY ground file successfully saved to {path_ground}")
+
+        if step == "rasterize_ground":
+            print("\nComputing ground rasterization..")
+            ground_mask = data["ground"].astype(bool)
+            grid_ground_3d = ground_extraction.rasterize_ground(
+                coords, ground_mask, **params
+            )
+
+            ground_rasterized = {
+                "x": grid_ground_3d[:, 0],
+                "y": grid_ground_3d[:, 1],
+                "z": grid_ground_3d[:, 2],
+                "ground_altitude": grid_ground_3d[:, 2],
+            }
+
+            path_rasterized = os.path.join(PATH_GROUND_RASTERIZED, filename)
+            if dict2ply(ground_rasterized, path_rasterized):
+                print(
+                    "* PLY ground rasterized file successfully saved to "
+                    f"{path_rasterized}"
+                )
+
         if step == "height_above_ground":
-            print("\nComputing height above ground..", end=' ', flush=True)
+            print("\nComputing height above ground..")
+            if grid_ground_3d is None:
+                path_rasterized = os.path.join(
+                    PATH_GROUND_RASTERIZED, filename
+                )
+                print(f"* Loading rasterized ground : {path_rasterized}")
+                ground_rasterized = ply2dict(path_rasterized)
+                grid_ground_3d = np.vstack(
+                    (
+                        ground_rasterized["x"],
+                        ground_rasterized["y"],
+                        ground_rasterized["z"],
+                    )
+                ).T
+
             ground_mask = data["ground"].astype(bool)
             heights = ground_extraction.height_above_ground(
-                coords, ground_mask, **params
+                coords, ground_mask, grid_ground_3d
             )
             data["height_above_ground"] = heights
             print("DONE")
 
-        if step == "rasterize_ground":
-            print("\nComputing ground rasterization..", end=' ', flush=True)
-            ground_mask = data["ground"].astype(bool)
-            grid_3d = ground_extraction.rasterize_ground(
-                coords, ground_mask, **params
-            )
-            ground_rasterized = {
-                "x": grid_3d[:, 0],
-                "y": grid_3d[:, 1],
-                "z": grid_3d[:, 2],
-            }
-            print("DONE")
-
-    return data, ground_only, ground_rasterized
+    # saving data
+    path_output = os.path.join(PATH_FEATURES, filename)
+    if dict2ply(data, path_output):
+        print(f"\nPLY features file successfully saved to {path_output}")
 
 
 if __name__ == "__main__":
@@ -232,13 +267,7 @@ if __name__ == "__main__":
             "(avg diff_height / avg distance)"
         ),
     )
-    # HEIGHT ABOVE GROUND
-    parser.add_argument(
-        "--height_above_ground",
-        "-hag",
-        action="store_true",
-        help="Compute height above ground",
-    )
+    # GROUND RASTERIZATION
     parser.add_argument(
         "--rasterize_ground",
         "-rag",
@@ -246,10 +275,23 @@ if __name__ == "__main__":
         help="Compute ground rasterization",
     )
     parser.add_argument(
-        "--rasterize_step",
+        "--step_rasterize",
         type=float,
         default=0.5,
         help="Step size used for rasterization",
+    )
+    parser.add_argument(
+        "--method_rasterize",
+        type=str,
+        default="delaunay",
+        help="Method used for ground rasterization",
+    )
+    # HEIGHT ABOVE GROUND
+    parser.add_argument(
+        "--height_above_ground",
+        "-hag",
+        action="store_true",
+        help="Compute height above ground",
     )
     args = parser.parse_args()
 
@@ -291,40 +333,23 @@ if __name__ == "__main__":
         }
         os.makedirs(PATH_GROUND_ONLY, exist_ok=True)
 
-    if args.height_above_ground or args.full_pipeline:
-        steps["height_above_ground"] = {}
-
     if args.rasterize_ground or args.full_pipeline:
+        assert args.method_rasterize in METHODS_RASTERIZATION
         steps["rasterize_ground"] = {
-            "step": args.rasterize_step,
+            "step_size": args.step_rasterize,
+            "method": args.method_rasterize,
         }
         os.makedirs(PATH_GROUND_RASTERIZED, exist_ok=True)
+
+    if args.height_above_ground or args.full_pipeline:
+        steps["height_above_ground"] = {}
 
     if len(steps.keys()) == 0:
         print("ERROR : No steps to compute")
         sys.exit(-1)
 
-    for file in args.files:
-        print(f"\nComputing features of file {file}")
+    for path_file in args.files:
+        print(f"\nComputing features of file {path_file}")
 
-        data = ply2dict(file)
-        data, ground_only, ground_rasterized = compute_features(data, steps)
-
-        # save PLY files
-        filename = os.path.split(file)[-1]
-        f_data = os.path.join(PATH_FEATURES, filename)
-        if dict2ply(data, f_data):
-            print(f"PLY file successfully saved to {f_data}")
-
-        if ground_only:
-            f_ground_only = os.path.join(PATH_GROUND_ONLY, filename)
-            if dict2ply(ground_only, f_ground_only):
-                print(f"PLY ground file successfully saved to {f_ground_only}")
-
-        if ground_rasterized:
-            f_ground_rasterized = os.path.join(
-                PATH_GROUND_RASTERIZED, filename
-            )
-            if dict2ply(ground_rasterized, f_ground_rasterized):
-                print("PLY ground rasterized file successfully saved to "
-                      f"{f_ground_rasterized}")
+        data = ply2dict(path_file)
+        compute_features(path_file, steps)

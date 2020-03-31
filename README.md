@@ -11,11 +11,13 @@ $ pip3 install -r requirements.txt
 ```
 
 ## Getting the data
+To get the data, you will first have to request access on the [ISPRS website](http://www2.isprs.org/commissions/comm3/wg4/detection-and-reconstruction.html), it is totally free.
+Fill out the questionnaire to receive the credentials.
+Then download data using the following script :
 
 ```
 $ chmod +x fetch_data.sh
 $ ./fetch_data.sh
-$ unzip data/vaihingen.zip -d data/
 ```
 
 ## 1. Preprocessing
@@ -28,14 +30,14 @@ Output files will be saved to `data/preprocessed/`.
 
 ## 2. Computing features
 
-Output files will be saved in `data/features/`.
 To compute all features at once, run the following command :
 
 ```
 $ python3 compute_features.py -f data/preprocessed/vaihingen3D_train.ply data/preprocessed/vaihingen3D_test.ply --full_pipeline
 ```
 
-Otherwise, features can be computed incrementaly as detailed below.
+Otherwise, features can be computed incrementally as detailed below.
+Output files will be saved in `data/features/`.
 
 ### 2.1 Local descriptors
 ```
@@ -57,20 +59,21 @@ $ python3 compute_features.py -f path/to/data.ply --ground_extraction --slope_in
 ```
 This will also output a point cloud of the ground only in `data/ground_only/`
 
-### 2.4 Height above ground
+
+### 2.4 Rasterize ground
+To visualize the underlying ground used to compute `height_above_ground` as a grid :
+```
+$ python3 compute_features.py -f path/to/data.ply --rasterize_ground --step_rasterize 0.5 --method_rasterize delaunay
+```
+This will output the rasterized ground as a point cloud in `data/ground_rasterized/`
+
+
+### 2.5 Height above ground
 
 Uses the extracted ground to compute `height_above_ground` for each point of the cloud.
 ```
 $ python3 compute_features.py -f path/to/data.ply --height_above_ground
 ```
-
-### 2.5 Rasterize ground
-To visualize the underlying ground used to compute `height_above_ground` as a grid :
-```
-$ python3 compute_features.py -f path/to/data.ply --rasterize_ground --rasterize_step 0.5
-```
-This will output the rasterized ground as a point cloud in `data/ground_rasterized/`
-
 
 
 ## Notes
@@ -79,4 +82,3 @@ To (re)compute one feature only, you can use other features previously computed 
 $ python3 compute_features.py -f data/features/vaihingen3D_train.ply --ground_extraction
 ```
 In this example, only the `ground` field of the point cloud will be modified.
-
