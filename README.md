@@ -55,7 +55,7 @@ $ python3 compute_features.py -f path/to/data.ply --region_growing --n_regions 5
 Stitches regions together to extract the ground :
 ```
 $ python3 compute_features.py -f path/to/data.ply --ground_extraction --slope_intra 0.1
- --slope_inter 0.2 --percentile_closest 0.1 
+ --slope_inter 0.2 --percentile_closest 0.1
 ```
 This will also output a point cloud of the ground only in `data/ground_only/`
 
@@ -75,6 +75,13 @@ Uses the extracted ground to compute `height_above_ground` for each point of the
 $ python3 compute_features.py -f path/to/data.ply --height_above_ground
 ```
 
+## 3. Training Bi LSTM network
+
+To train the network, run the following command :
+
+```
+$ python3 train.py -f path/to/preprocessed/vaihingen3D_train.ply
+```
 
 ## Notes
 To (re)compute one feature only, you can use other features previously computed :
