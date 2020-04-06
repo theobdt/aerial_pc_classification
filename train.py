@@ -14,15 +14,14 @@ PATH_FEATURES = "data/features"
 # hyper-parameters
 BATCH_SIZE = 1000
 NUM_EPOCHS = 1
-NUM_NEIGHBOORS = 20 # k of kNN
+NUM_NEIGHBOORS = 20  # k of kNN
 LEARNING_RATE = 0.001
-NUM_LAYERS = 10 # nb of layers in lSTM network
-HIDDEN_SIZE = 20 # nb of hidden units
-INPUT_SIZE =  8 # nb of features
+NUM_LAYERS = 10  # nb of layers in lSTM network
+HIDDEN_SIZE = 20  # nb of hidden units
+INPUT_SIZE = 8  # nb of features
 NUM_CLASSES = 9
-NUM_WORKERS = 2 # nb of parallel workers
+NUM_WORKERS = 2  # nb of parallel workers
 
-#if __name__ == "__main__":
 
 parser = argparse.ArgumentParser(description="Training")
 
@@ -32,7 +31,7 @@ parser.add_argument(
     type=str,
     nargs="+",
     default="vaihingen3D_test.ply",
-    help="Path to the processed point cloud file"
+    help="Path to the processed point cloud file",
 )
 parser.add_argument(
     "-bs", "--batch_size", type=int, default=BATCH_SIZE, help="Batch size"
@@ -69,16 +68,10 @@ parser.add_argument(
     help="Number of features in the input",
 )
 parser.add_argument(
-    "--num_class",
-    type=int,
-    default=NUM_CLASSES,
-    help="Number of classes",
+    "--num_class", type=int, default=NUM_CLASSES, help="Number of classes",
 )
 parser.add_argument(
-    "--num_workers",
-    type=int,
-    default=NUM_WORKERS,
-    help="Number of workers",
+    "--num_workers", type=int, default=NUM_WORKERS, help="Number of workers",
 )
 
 args = parser.parse_args()
@@ -90,18 +83,15 @@ print(f"\nTraining from file {args.file[0]}")
 training_data = os.path.join(PATH_FEATURES, args.file[0])
 dataset = AerialPointDataset(training_data, args.kNN)
 train_loader = DataLoader(
-                    dataset=dataset,
-                    batch_size=args.batch_size,
-                    shuffle=True,
-                    num_workers=args.num_workers
+    dataset=dataset,
+    batch_size=args.batch_size,
+    shuffle=True,
+    num_workers=args.num_workers,
 )
 
 # Define model
 model = BiLSTM(
-            args.input_size,
-            args.hidden_size,
-            args.num_class,
-            args.num_layer
+    args.input_size, args.hidden_size, args.num_class, args.num_layer
 )
 
 # Define loss and optimizer
@@ -115,9 +105,9 @@ def decentralized_coordinate(coords):
 
 
 total_samples = len(dataset)
-n_iter = math.ceil(total_samples/args.batch_size)
-print(f'\nTotal samples : {total_samples} ; '
-      f'Number of iterations : {n_iter}'
+n_iter = math.ceil(total_samples / args.batch_size)
+print(
+    f"\nTotal samples : {total_samples} ; " f"Number of iterations : {n_iter}"
 )
 
 history_loss_train = []
@@ -145,29 +135,30 @@ for epoch in range(args.num_epochs):
         # calculate accuracy of predictions in the current batch
         n_correct = (torch.max(output, 1).indices == label).sum().item()
         n_total = BATCH_SIZE
-        train_acc = 100. * n_correct/n_total
+        train_acc = 100.0 * n_correct / n_total
 
         history_loss_train.append(train_loss.item())
         history_acc_train.append(train_acc)
 
-        if (i+1) % 10 == 0:
-            print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Acc: {:.2f} %'
-                   .format(
-                       epoch+1,
-                       args.num_epochs,
-                       i+1,
-                       n_iter,
-                       train_loss.item(),
-                       sum(history_acc_train[-10:]) / 10
-                       )
-                   )
+        if (i + 1) % 10 == 0:
+            print(
+                "Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, "
+                "Acc: {:.2f} %".format(
+                    epoch + 1,
+                    args.num_epochs,
+                    i + 1,
+                    n_iter,
+                    train_loss.item(),
+                    sum(history_acc_train[-10:]) / 10,
+                )
+            )
 
 plt.figure()
 plt.plot(history_loss_train)
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
 
 plt.figure()
 plt.plot(history_acc_train)
-plt.xlabel('Epochs')
-plt.ylabel('Accuracy (%)')
+plt.xlabel("Epochs")
+plt.ylabel("Accuracy (%)")
