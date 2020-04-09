@@ -80,7 +80,7 @@ $ python3 compute_features.py -f path/to/data.ply --height_above_ground
 To train the network, run the following command :
 
 ```
-$ python3 train.py -f path/to/preprocessed/vaihingen3D_train.ply
+$ python3 train.py 
 ```
 
 ## Notes

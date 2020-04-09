@@ -5,73 +5,47 @@ import argparse
 import math
 import os
 import matplotlib.pyplot as plt
+import yaml
+from datetime import datetime
+import shutil
 
 from utils.dataloader import AerialPointDataset
-from model import BiLSTM
-
-PATH_FEATURES = "data/features"
-
-# hyper-parameters
-BATCH_SIZE = 1000
-NUM_EPOCHS = 1
-NUM_NEIGHBOORS = 20  # k of kNN
-LEARNING_RATE = 0.001
-NUM_LAYERS = 10  # nb of layers in lSTM network
-HIDDEN_SIZE = 20  # nb of hidden units
-INPUT_SIZE = 8  # nb of features
-NUM_CLASSES = 9
-NUM_WORKERS = 2  # nb of parallel workers
+from models import BiLSTM
 
 
 parser = argparse.ArgumentParser(description="Training")
-
 parser.add_argument(
-    "--file",
-    "-f",
+    "--config",
     type=str,
-    nargs="+",
-    default="vaihingen3D_test.ply",
-    help="Path to the processed point cloud file",
+    default="cfg/config_bilstm.yaml",
+    help="Path to the config file",
 )
 parser.add_argument(
-    "-bs", "--batch_size", type=int, default=BATCH_SIZE, help="Batch size"
+    "--debug", action="store_true", help="Debug mode",
 )
 parser.add_argument(
-    "--num_epochs", type=int, default=NUM_EPOCHS, help="Number of epochs"
+    "--log_interval", type=int, default=10, help="Log interval for training",
 )
 parser.add_argument(
-    "-k",
-    "--kNN",
-    type=int,
-    default=NUM_NEIGHBOORS,
-    help="Number of nearest neighboors",
+    "--path_ckpts",
+    type=str,
+    default="ckpts",
+    help="Path to the checkpoint folder",
 )
 parser.add_argument(
-    "--lr", type=float, default=LEARNING_RATE, help="Start learning rate",
+    "--resume", "-r", type=str, help="Name of the checkpoint to resume",
 )
 parser.add_argument(
-    "--num_layer",
-    type=int,
-    default=NUM_LAYERS,
-    help="Number of layers in lSTM network",
+    "--data_train",
+    type=str,
+    default="data/features/vaihingen3D_train.ply",
+    help="Path to training data",
 )
 parser.add_argument(
-    "--hidden_size",
-    type=int,
-    default=HIDDEN_SIZE,
-    help="Number of features in the hidden state",
-)
-parser.add_argument(
-    "--input_size",
-    type=int,
-    default=INPUT_SIZE,
-    help="Number of features in the input",
-)
-parser.add_argument(
-    "--num_class", type=int, default=NUM_CLASSES, help="Number of classes",
-)
-parser.add_argument(
-    "--num_workers", type=int, default=NUM_WORKERS, help="Number of workers",
+    "--data_test",
+    type=str,
+    default="data/features/vaihingen3D_test.ply",
+    help="Path to test data",
 )
 
 args = parser.parse_args()
@@ -79,24 +53,80 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device in use : {device}")
 
-print(f"\nTraining from file {args.file[0]}")
-training_data = os.path.join(PATH_FEATURES, args.file[0])
-dataset = AerialPointDataset(training_data, args.kNN)
-train_loader = DataLoader(
-    dataset=dataset,
-    batch_size=args.batch_size,
-    shuffle=True,
-    num_workers=args.num_workers,
+
+def init_ckpt():
+    checkpoint = {
+        "epoch": 0,
+        "model_state_dict": None,
+        "optimizer_state_dict": None,
+        "losses": [],
+        "accuracies": [],
+        "best_train_loss": float("inf"),
+    }
+    return checkpoint
+
+
+if args.resume:
+    path_ckpt = os.path.join(args.path_ckpts, args.resume)
+    print(f"Loading checkpoint {path_ckpt}")
+    path_config = os.path.join(path_ckpt, "config.yaml")
+    path_ckpt_dict = os.path.join(path_ckpt, "ckpt.pt")
+    checkpoint = torch.load(path_ckpt_dict)
+else:
+    ckpt_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path_ckpt = os.path.join(args.path_ckpts, ckpt_name)
+    os.makedirs(path_ckpt, exist_ok=True)
+    path_config = os.path.join(path_ckpt, "config.yaml")
+    shutil.copy2(args.config, path_config)
+    path_ckpt_dict = os.path.join(path_ckpt, "ckpt.pt")
+    checkpoint = init_ckpt()
+    print(f"Initialized checkpoint {path_ckpt}")
+
+print(f"\nConfig file: {path_config}")
+
+with open(path_config, "r") as f:
+    config = yaml.safe_load(f)
+
+# get number of epochs
+epoch_start = checkpoint["epoch"]
+epoch_end = config["training"].pop("epoch_end")
+print(f"Epoch start: {epoch_start}, Epoch end: {epoch_end}")
+
+max_batches_train = config["training"].pop("max_batches")
+max_batches_test = config["test"].pop("max_batches")
+print(f'\nTraining file: {args.data_train}')
+print(f'Test file: {args.data_test}')
+
+dataset_train = AerialPointDataset(args.data_train, **config["data"])
+dataset_test = AerialPointDataset(args.data_test, **config["data"])
+
+train_loader = DataLoader(dataset=dataset_train, **config["training"])
+test_loader = DataLoader(dataset=dataset_test, **config["test"])
+
+
+print(
+    f"Total samples train: {len(dataset_train)}, "
+    f"Number of batches: {len(train_loader)}"
+    f"\nTotal samples test: {len(dataset_test)}, "
+    f"Number of batches: {len(test_loader)}"
 )
 
 # Define model
-model = BiLSTM(
-    args.input_size, args.hidden_size, args.num_class, args.num_layer
-)
+n_features = len(config["data"]["features"])
+n_classes = 4
+if config["data"]["all_labels"]:
+    n_classes = 9
+print(f"Num classes: {n_classes}\n")
+model = BiLSTM(n_features, n_classes, **config["network"])
 
 # Define loss and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+lr = config["optimizer"]["learning_rate"]
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+if args.resume:
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
 def decentralized_coordinate(coords):
@@ -104,27 +134,18 @@ def decentralized_coordinate(coords):
     return decentralized_coords
 
 
-total_samples = len(dataset)
-n_iter = math.ceil(total_samples / args.batch_size)
-print(
-    f"\nTotal samples : {total_samples} ; " f"Number of iterations : {n_iter}"
-)
-
-history_loss_train = []
-history_acc_train = []
-n_correct = 0
-n_total = 0
-
-# Training loop
-for epoch in range(args.num_epochs):
+def train(loader, log_interval, max_batches=None):
+    model.train()
+    if max_batches is None:
+        max_batches = len(loader)
+    history_acc_train = []
+    history_loss_train = []
     for i, (sequence, label) in enumerate(train_loader):
 
-        # sequence shape = (batch_size, [point ; neighbors], nb_features)
-        sequence[:, :, :3] = decentralized_coordinate(sequence[:, :, :3])
         label = label.type(dtype=torch.long)
 
         # Forward pass
-        output = model(sequence, debug=False)
+        output = model(sequence, debug=args.debug)
         train_loss = criterion(output, label)
 
         # Backward and optimize
@@ -134,31 +155,95 @@ for epoch in range(args.num_epochs):
 
         # calculate accuracy of predictions in the current batch
         n_correct = (torch.max(output, 1).indices == label).sum().item()
-        n_total = BATCH_SIZE
-        train_acc = 100.0 * n_correct / n_total
+        train_acc = 100.0 * n_correct / len(label)
 
         history_loss_train.append(train_loss.item())
         history_acc_train.append(train_acc)
 
-        if (i + 1) % 10 == 0:
+        if (i + 1) % log_interval == 0:
             print(
                 "Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, "
                 "Acc: {:.2f} %".format(
                     epoch + 1,
-                    args.num_epochs,
+                    epoch_end,
                     i + 1,
-                    n_iter,
+                    max_batches,
                     train_loss.item(),
-                    sum(history_acc_train[-10:]) / 10,
+                    sum(history_acc_train[-log_interval:]) / log_interval,
                 )
             )
+        if i + 1 > max_batches:
+            break
+    return history_loss_train, history_acc_train
 
-plt.figure()
-plt.plot(history_loss_train)
-plt.xlabel("Epochs")
-plt.ylabel("Loss")
 
-plt.figure()
-plt.plot(history_acc_train)
-plt.xlabel("Epochs")
-plt.ylabel("Accuracy (%)")
+def evaluate(loader, max_batches=None):
+    model.eval()
+    if max_batches is None:
+        max_batches = len(loader)
+    total_loss = 0
+    total_correct = 0
+    with torch.no_grad():
+        for i, (sequence, label) in enumerate(loader):
+            label = label.type(dtype=torch.long)
+            output = model(sequence)
+
+            total_loss += criterion(output, label)
+
+            n_correct = (torch.max(output, 1).indices == label).sum().item()
+            total_correct += n_correct / len(label)
+            if i + 1 > max_batches:
+                break
+    avg_loss = total_loss / max_batches
+    avg_acc = 100 * total_correct / max_batches
+    print(f"Test Loss : {avg_loss:.4f}, Test Acc : {avg_acc:.2f} %\n")
+    return avg_loss, avg_acc
+
+
+# Training loop
+for epoch in range(epoch_start, epoch_end):
+    hist_loss_train, hist_acc_train = train(
+        train_loader,
+        log_interval=args.log_interval,
+        max_batches=max_batches_train,
+    )
+    test_loss, test_acc = evaluate(test_loader, max_batches=max_batches_test)
+
+    # update checkpoint
+    checkpoint["losses"].append((hist_loss_train, test_loss))
+    checkpoint["accuracies"].append((hist_acc_train, test_acc))
+
+    avg_train_loss = sum(hist_loss_train) / len(hist_loss_train)
+    if avg_train_loss < checkpoint["best_train_loss"]:
+        checkpoint["best_train_loss"] = avg_train_loss
+        checkpoint["model_state_dict"] = model.state_dict()
+    checkpoint["epoch"] = epoch
+    checkpoint["optimizer_state_dict"] = optimizer.state_dict()
+    torch.save(checkpoint, path_ckpt_dict)
+
+
+def plot_metric(ax, metric, label):
+    train_values = []
+    x_test = []
+    y_test = []
+    for (hist_train, test_value) in metric:
+        train_values += hist_train
+        x_test.append(len(train_values))
+        y_test.append(test_value)
+    ax.plot(train_values, label="train_" + label)
+    ax.plot(x_test, y_test, label="test_" + label)
+    ax.set_xlabel("Batches")
+    ax.legend()
+
+
+_, axes = plt.subplots(nrows=2, sharex=True)
+axes[0].set_title("Loss")
+plot_metric(axes[0], checkpoint["losses"], "loss")
+
+axes[1].set_title("Accuracy")
+plot_metric(axes[1], checkpoint["accuracies"], "acc")
+plt.tight_layout()
+path_fig = os.path.join(path_ckpt, "figure.png")
+plt.savefig(path_fig)
+print(f"Figure saved to {path_fig}")
+plt.show()

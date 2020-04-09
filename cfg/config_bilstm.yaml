@@ -1,0 +1,21 @@
+network:
+  hidden_size: 200
+  num_layers: 3
+  relation_type: 2
+training:
+  batch_size: 1000
+  max_batches: 300 # max number of batches per epoch
+  epoch_end: 20
+  num_workers: 2
+  shuffle: True
+test:
+  batch_size: 1000
+  max_batches: 50 # max number of batches per epoch
+  num_workers: 2
+  shuffle: True
+optimizer:
+  learning_rate: 0.001
+data:
+  features: ['height_above_ground', 'planarity', 'sphericity', 'verticality']
+  n_neighbors: 20
+  all_labels: True
