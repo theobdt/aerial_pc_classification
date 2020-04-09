@@ -5,6 +5,9 @@ from torch.autograd import Variable
 SIZE_RELATION_TYPE = {0: 0, 1: 1, 2: 3, 3: 4, 4: 3}
 
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class BiLSTM(nn.Module):
     def __init__(
         self, n_features, num_classes, hidden_size, num_layers, relation_type=1
@@ -68,10 +71,20 @@ class BiLSTM(nn.Module):
         # shape (num_layers * num_directions, batch, hidden_size)
         hidden = (
             Variable(
-                torch.zeros(self.num_layers * 2, batch_size, self.hidden_size)
+                torch.zeros(
+                    self.num_layers * 2,
+                    batch_size,
+                    self.hidden_size,
+                    device=device,
+                )
             ),
             Variable(
-                torch.zeros(self.num_layers * 2, batch_size, self.hidden_size)
+                torch.zeros(
+                    self.num_layers * 2,
+                    batch_size,
+                    self.hidden_size,
+                    device=device,
+                )
             ),
         )
         return hidden

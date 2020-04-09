@@ -117,7 +117,7 @@ n_classes = 4
 if config["data"]["all_labels"]:
     n_classes = 9
 print(f"Num classes: {n_classes}\n")
-model = BiLSTM(n_features, n_classes, **config["network"])
+model = BiLSTM(n_features, n_classes, **config["network"]).to(device)
 
 # Define loss and optimizer
 criterion = nn.CrossEntropyLoss()
@@ -141,6 +141,8 @@ def train(loader, log_interval, max_batches=None):
     history_acc_train = []
     history_loss_train = []
     for i, (sequence, label) in enumerate(train_loader):
+        sequence = sequence.to(device)
+        label = label.to(device)
 
         label = label.type(dtype=torch.long)
 
@@ -185,6 +187,8 @@ def evaluate(loader, max_batches=None):
     total_correct = 0
     with torch.no_grad():
         for i, (sequence, label) in enumerate(loader):
+            sequence = sequence.to(device)
+            label = label.to(device)
             label = label.type(dtype=torch.long)
             output = model(sequence)
 
