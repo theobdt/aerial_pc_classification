@@ -20,6 +20,9 @@ parser.add_argument(
     "--ckpt", type=str, help="Path to the checkpoint folder",
 )
 parser.add_argument(
+    "--prefix_path", type=str, default="", help="Path prefix",
+)
+parser.add_argument(
     "--batch_size", type=int, default=1000, help="Batch size",
 )
 parser.add_argument(
@@ -40,9 +43,8 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device in use : {device}")
 
-
 # Load checkpoint
-path_ckpt = os.path.normpath(args.ckpt)
+path_ckpt = os.path.join(args.prefix_path, os.path.normpath(args.ckpt))
 print(f"Loading checkpoint: {path_ckpt}")
 path_config = os.path.join(path_ckpt, "config.yaml")
 path_ckpt_dict = os.path.join(path_ckpt, "ckpt.pt")
@@ -50,7 +52,9 @@ checkpoint = torch.load(path_ckpt_dict, map_location=device)
 
 # Create prediction folder
 ckpt_id = os.path.basename(path_ckpt)
-ckpt_prediction_folder = os.path.join(args.prediction_folder, ckpt_id)
+ckpt_prediction_folder = os.path.join(
+    args.prefix_path, args.prediction_folder, ckpt_id
+)
 os.makedirs(ckpt_prediction_folder, exist_ok=True)
 
 # Load model config
@@ -89,10 +93,11 @@ def predict(loader, len_dataset):
             predictions[start : start + seq_len] = classes
             start += seq_len
 
-    return predictions.numpy()
+    return predictions.cpu().numpy()
 
 
 for path_ply in args.files:
+    path_ply = os.path.join(args.prefix_path, path_ply)
     print(f"\nProcessing file: {path_ply}")
     print("* Preparing dataloader..", end=" ", flush=True)
     dataset = AerialPointDataset(path_ply, **config["data"])

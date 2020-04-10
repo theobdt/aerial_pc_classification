@@ -32,6 +32,9 @@ parser.add_argument(
     help="Path to the checkpoint folder",
 )
 parser.add_argument(
+    "--prefix_path", type=str, default='', help="Path prefix",
+)
+parser.add_argument(
     "--resume", "-r", type=str, help="Name of the checkpoint to resume",
 )
 parser.add_argument(
@@ -66,14 +69,14 @@ def init_ckpt():
 
 
 if args.resume:
-    path_ckpt = os.path.join(args.path_ckpts, args.resume)
+    path_ckpt = os.path.join(args.prefix_path, args.path_ckpts, args.resume)
     print(f"Loading checkpoint {path_ckpt}")
     path_config = os.path.join(path_ckpt, "config.yaml")
     path_ckpt_dict = os.path.join(path_ckpt, "ckpt.pt")
     checkpoint = torch.load(path_ckpt_dict, map_location=device)
 else:
     ckpt_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    path_ckpt = os.path.join(args.path_ckpts, ckpt_name)
+    path_ckpt = os.path.join(args.prefix_path, args.path_ckpts, ckpt_name)
     os.makedirs(path_ckpt, exist_ok=True)
     path_config = os.path.join(path_ckpt, "config.yaml")
     shutil.copy2(args.config, path_config)
@@ -93,11 +96,14 @@ print(f"Epoch start: {epoch_start}, Epoch end: {epoch_end}")
 
 max_batches_train = config["training"].pop("max_batches")
 max_batches_test = config["test"].pop("max_batches")
-print(f'\nTraining file: {args.data_train}')
-print(f'Test file: {args.data_test}')
 
-dataset_train = AerialPointDataset(args.data_train, **config["data"])
-dataset_test = AerialPointDataset(args.data_test, **config["data"])
+path_train_ply = os.path.join(args.prefix_path, args.data_train)
+path_test_ply = os.path.join(args.prefix_path, args.data_test)
+print(f'\nTraining file: {path_train_ply}')
+print(f'Test file: {path_test_ply}')
+
+dataset_train = AerialPointDataset(path_train_ply, **config["data"])
+dataset_test = AerialPointDataset(path_test_ply, **config["data"])
 
 train_loader = DataLoader(dataset=dataset_train, **config["training"])
 test_loader = DataLoader(dataset=dataset_test, **config["test"])
