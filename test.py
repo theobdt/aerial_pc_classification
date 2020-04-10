@@ -6,7 +6,7 @@ import yaml
 from tqdm import tqdm
 import numpy as np
 
-from utils.dataloader import AerialPointDataset
+from utils.dataloader import AerialPointDataset, convert_labels
 from utils.ply import ply2dict, dict2ply
 from models import BiLSTM
 
@@ -107,13 +107,19 @@ for path_ply in args.files:
     # Create and fill point cloud field
     data = ply2dict(path_ply)
     true_labels = data["labels"]
+
+    # in the 4-labels case
+    if not config["data"]["all_labels"]:
+        true_labels = convert_labels(true_labels).astype(np.int32)
+
     n = len(true_labels)
-    predictions = np.ones(n, dtype=np.int32)
-    raw_predictions = predict(loader, len(dataset))
+    predictions = -np.ones(n, dtype=np.int32)
+    raw_predictions = predict(loader, len(dataset)).astype(np.int32)
     predictions[dataset.index] = raw_predictions
-    errors = np.logical_and(predictions >= 0, predictions != true_labels)
+    errors = predictions != true_labels
     data["predictions"] = predictions
     data["errors"] = errors.astype(np.uint8)
+    data["labels"] = true_labels
 
     # Save point cloud
     filename = os.path.basename(path_ply)
