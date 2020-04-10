@@ -21,20 +21,27 @@ class AerialPointDataset(Dataset):
             return
         labels = data["labels"]
 
+        self.index = np.arange(X.shape[0])
         if not all_labels:
-            X, labels = filter_labels(X, labels)
+            X, labels = self.filter_labels(X, labels)
 
         self.X = torch.from_numpy(X)
         self.labels = torch.from_numpy(labels)
         self.n_samples = self.labels.shape[0]
         tree = KDTree(self.X[:, :3])
-        _, self.inds = tree.query(
+        _, self.neighbors_idx = tree.query(
             self.X[:, :3], k=n_neighbors, sort_results=True
         )
 
+    def filter_labels(self, X, labels):
+        new_labels = np.vectorize(LABELS_MAP.get)(labels)
+        mask = new_labels != 4
+        self.index = self.index[mask]
+        return X[mask], new_labels[mask]
+
     def __getitem__(self, index):
         point = self.X[index].view(1, -1)
-        neighbors = self.X[self.inds[index]]
+        neighbors = self.X[self.neighbors_idx[index]]
         sequence = torch.cat((point, neighbors), 0)
 
         return sequence, self.labels[index]
@@ -43,10 +50,6 @@ class AerialPointDataset(Dataset):
         return self.n_samples
 
 
-def filter_labels(X, labels):
-    new_labels = np.vectorize(LABELS_MAP.get)(labels)
-    mask = new_labels != 4
-    return X[mask], new_labels[mask]
 
 
 # if __name__ == "__main__":

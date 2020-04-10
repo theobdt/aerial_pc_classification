@@ -83,6 +83,11 @@ To train the network, run the following command :
 $ python3 train.py 
 ```
 
+## 4. Predict with Bi LSTM network
+```
+$ python3 test.py -f data/features/vaihingen3D_test.ply --ckpt ckpts/2020-04-10_12-25-36
+```
+
 ## Notes
 To (re)compute one feature only, you can use other features previously computed :
 ```

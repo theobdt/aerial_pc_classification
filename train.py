@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import argparse
-import math
 import os
 import matplotlib.pyplot as plt
 import yaml
@@ -71,7 +70,7 @@ if args.resume:
     print(f"Loading checkpoint {path_ckpt}")
     path_config = os.path.join(path_ckpt, "config.yaml")
     path_ckpt_dict = os.path.join(path_ckpt, "ckpt.pt")
-    checkpoint = torch.load(path_ckpt_dict)
+    checkpoint = torch.load(path_ckpt_dict, map_location=device)
 else:
     ckpt_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path_ckpt = os.path.join(args.path_ckpts, ckpt_name)
@@ -243,9 +242,11 @@ def plot_metric(ax, metric, label):
 _, axes = plt.subplots(nrows=2, sharex=True)
 axes[0].set_title("Loss")
 plot_metric(axes[0], checkpoint["losses"], "loss")
+axes[0].set_ylim([0, 2])
 
 axes[1].set_title("Accuracy")
 plot_metric(axes[1], checkpoint["accuracies"], "acc")
+axes[1].set_ylim([0, 100])
 plt.tight_layout()
 path_fig = os.path.join(path_ckpt, "figure.png")
 plt.savefig(path_fig)
