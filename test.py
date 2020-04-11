@@ -42,6 +42,11 @@ parser.add_argument(
     "--batch_size", type=int, default=1000, help="Batch size",
 )
 parser.add_argument(
+    "--weighted_avg",
+    action="store_true",
+    help="Average metrics with support as weight",
+)
+parser.add_argument(
     "--num_workers",
     type=int,
     default=4,
@@ -98,7 +103,6 @@ def predict(loader, len_dataset):
         for (sequence, label) in tqdm(loader, desc="* Processing point cloud"):
             sequence = sequence.to(device)
             label = label.to(device)
-            # label = label.type(dtype=torch.long)
 
             # compute predicted classes
             output = model(sequence)
@@ -112,28 +116,33 @@ def predict(loader, len_dataset):
     return predictions.cpu().numpy()
 
 
-def evaluate(y_true, y_pred, names):
+def evaluate(y_true, y_pred, names, weighted_avg=False):
     labels = np.arange(len(names))
 
-    cm = skm.confusion_matrix(y_true, y_pred, labels=labels).T
-    total = np.sum(cm, axis=0)
+    cm = skm.confusion_matrix(y_true, y_pred, labels=labels)
+    totals = np.sum(cm, axis=1)
+    cm = np.hstack((cm, totals.reshape(-1, 1)))
+    cm = np.vstack((cm, np.sum(cm, axis=0, keepdims=True)))
+
     metrics = skm.precision_recall_fscore_support(
         y_true, y_pred, labels=labels
     )
-    metrics = np.vstack(metrics[:-1])
-    all_metrics = np.vstack((cm, total, metrics)).T
-    total_preds = np.sum(all_metrics[:, : len(labels) + 1], axis=0)
-    avg_metrics = np.mean(all_metrics[:, len(labels) + 1 :], axis=0)
+    metrics = np.vstack(metrics[:-1]).T
+    if weighted_avg:
+        avg_metrics = totals @ metrics / np.sum(totals)
+        name_last_row = "Total/Weighted Avg"
+    else:
+        avg_metrics = np.mean(metrics, axis=0)
+        name_last_row = "Total/Avg"
+    metrics = np.vstack((metrics, avg_metrics))
 
-    full_data = np.vstack(
-        (all_metrics, np.concatenate((total_preds, avg_metrics)))
-    )
+    all_data = np.hstack((cm, metrics))
 
     cols_int = names + ["Total"]
     cols_float = ["Precision", "Recall", "F1-score"]
 
-    idx = names + ["Total/Avg"]
-    df = pd.DataFrame(data=full_data, columns=cols_int + cols_float, index=idx)
+    idx = names + [name_last_row]
+    df = pd.DataFrame(data=all_data, columns=cols_int + cols_float, index=idx)
     df[cols_int] = df[cols_int].astype(int)
     return df
 
@@ -201,5 +210,10 @@ for path_ply in args.files:
     if dict2ply(data, path_prediction):
         print(f"* Predictions PLY file saved to: {path_prediction}")
 
-    df = evaluate(true_labels[true_labels >= 0], raw_predictions, names)
+    df = evaluate(
+        true_labels[true_labels >= 0],
+        raw_predictions,
+        names,
+        args.weighted_avg,
+    )
     write_metrics(ckpt_prediction_folder, filename, df)
