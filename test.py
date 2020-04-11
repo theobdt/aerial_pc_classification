@@ -5,10 +5,26 @@ import os
 import yaml
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
+import sklearn.metrics as skm
 
 from utils.dataloader import AerialPointDataset, convert_labels
 from utils.ply import ply2dict, dict2ply
 from models import BiLSTM
+
+NAMES_9 = [
+    "Powerline",
+    "Low veg.",
+    "Imp. surf.",
+    "Car",
+    "Fence",
+    "Roof",
+    "Facade",
+    "Shrub",
+    "Tree",
+]
+
+NAMES_4 = ["GLO", "Roof", "Facade", "Vegetation"]
 
 
 parser = argparse.ArgumentParser(description="Training")
@@ -96,6 +112,57 @@ def predict(loader, len_dataset):
     return predictions.cpu().numpy()
 
 
+def evaluate(y_true, y_pred, names):
+    labels = np.arange(len(names))
+
+    cm = skm.confusion_matrix(y_true, y_pred, labels=labels).T
+    total = np.sum(cm, axis=0)
+    metrics = skm.precision_recall_fscore_support(
+        y_true, y_pred, labels=labels
+    )
+    metrics = np.vstack(metrics[:-1])
+    all_metrics = np.vstack((cm, total, metrics)).T
+    total_preds = np.sum(all_metrics[:, : len(labels) + 1], axis=0)
+    avg_metrics = np.mean(all_metrics[:, len(labels) + 1 :], axis=0)
+
+    full_data = np.vstack(
+        (all_metrics, np.concatenate((total_preds, avg_metrics)))
+    )
+
+    cols_int = names + ["Total"]
+    cols_float = ["Precision", "Recall", "F1-score"]
+
+    idx = names + ["Total/Avg"]
+    df = pd.DataFrame(data=full_data, columns=cols_int + cols_float, index=idx)
+    df[cols_int] = df[cols_int].astype(int)
+    return df
+
+
+def write_metrics(path_prediction, filename, df):
+    filename = filename.split(".")[0]
+    path_metrics = os.path.join(path_prediction, "metrics")
+    os.makedirs(path_metrics, exist_ok=True)
+
+    path_tex = os.path.join(path_metrics, f"{filename}.tex")
+    path_txt = os.path.join(path_metrics, f"{filename}.txt")
+    print(path_tex)
+
+    # write tex file
+    column_format = "|l|" + df.shape[1] * "r|"
+    with open(path_tex, "w") as f:
+        f.write(
+            df.to_latex(
+                bold_rows=True,
+                float_format="{:0.2f}".format,
+                column_format=column_format,
+            )
+        )
+
+    with open(path_txt, "w") as f:
+        df.to_string(f)
+    print(f"* Metrics written to: {path_tex} and {path_tex}")
+
+
 for path_ply in args.files:
     path_ply = os.path.join(args.prefix_path, path_ply)
     print(f"\nProcessing file: {path_ply}")
@@ -112,10 +179,12 @@ for path_ply in args.files:
     # Create and fill point cloud field
     data = ply2dict(path_ply)
     true_labels = data["labels"]
+    names = NAMES_9
 
     # in the 4-labels case
     if not config["data"]["all_labels"]:
         true_labels = convert_labels(true_labels).astype(np.int32)
+        names = NAMES_4
 
     n = len(true_labels)
     predictions = -np.ones(n, dtype=np.int32)
@@ -131,3 +200,6 @@ for path_ply in args.files:
     path_prediction = os.path.join(ckpt_prediction_folder, filename)
     if dict2ply(data, path_prediction):
         print(f"* Predictions PLY file saved to: {path_prediction}")
+
+    df = evaluate(true_labels[true_labels >= 0], raw_predictions, names)
+    write_metrics(ckpt_prediction_folder, filename, df)
