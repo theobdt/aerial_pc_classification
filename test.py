@@ -217,3 +217,4 @@ for path_ply in args.files:
         args.weighted_avg,
     )
     write_metrics(ckpt_prediction_folder, filename, df)
+    print(df)

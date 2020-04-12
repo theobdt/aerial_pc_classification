@@ -100,8 +100,6 @@ def multi_region_growing(
         region_mask = region_growing(
             coords, normals, radius, descriptor_vals, minimize, thresholds
         )
-        if np.sum(region_mask) < 5:
-            continue
 
         idx_region = indexes[region_mask]
         region_labels[idx_region] = label_i

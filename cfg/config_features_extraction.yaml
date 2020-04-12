@@ -1,0 +1,28 @@
+# Local descriptors available: 
+# ["normals", "verticality", "linearity", "planarity", "sphericity", "curvature"]
+descriptors:
+  descriptors: ["all"]
+  radius: 2
+  preferred_orientation: "+z"  # normals orientation
+  epsilon: 0.01  # Epsilon added to denominator for some descriptors
+
+region_growing:
+  n_regions: 200  # max number of regions to grow
+  radius: 1  # radius used to select candidate points from queue points
+  minimize: False  # maximize(False) or minimize(True) the following descriptor
+  descriptor: "planarity"  # descriptor to maximize/minimize
+  thresholds:
+    height: 0.1  # max diff of height between queue points and candidate points
+    angle: 0.1  # max diff of normals angle (rads) for candidate points
+    descriptor: 0.1  # max/min value of [descriptor] in candidate points
+
+ground_extraction:
+  slope_intra_max: 0.1  # Maximum internal relative slope for candidate regions (diff_height / span)
+  slope_inter_max: 0.2  # Maximum relative slope between current ground and candidate regions (avf diff_height / avg distance)
+  percentile_closest: 0.01  # Percentile of closest points in candidate region used to compute slope_inter
+
+ground_rasterization:
+  method: "delaunay"  # "closest_neighbor" or "delaunay"
+  step_size: 0.5  # step size of the grid used to rasterize
+
+height_above_ground:

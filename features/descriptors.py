@@ -5,6 +5,17 @@ from tqdm import tqdm
 
 ORIENTATIONS = ["+x", "-x", "+y", "-y", "+z", "-z"]
 
+DESCRIPTORS = [
+    "normals",
+    "verticality",
+    "linearity",
+    "planarity",
+    "sphericity",
+    "curvature",
+    "anisotropy",
+    "surface_variation",
+]
+
 
 def local_PCA(points):
 
@@ -62,8 +73,10 @@ def compute_descriptors(
     coords, radius, descriptors, preferred_orientation, epsilon
 ):
 
-    if len(descriptors) == 0:
-        return
+    if "all" in descriptors:
+        descriptors = DESCRIPTORS
+    assert len(descriptors) > 0
+    assert np.all([d in DESCRIPTORS for d in descriptors])
 
     print(f"* descriptors: {descriptors}")
     print(f"* radius: {radius}")
@@ -76,10 +89,10 @@ def compute_descriptors(
 
     normals_z = normals[:, 2]
 
-    # lambda_1 >= lambda_2 >= lambda_3
-    lambda_1 = eigenvalues[:, 2]
-    lambda_2 = eigenvalues[:, 1]
-    lambda_3 = eigenvalues[:, 0]
+    # L_1 >= L_2 >= L_3
+    L_1 = eigenvalues[:, 2]
+    L_2 = eigenvalues[:, 1]
+    L_3 = eigenvalues[:, 0]
 
     # epsilon = 1e-2 * np.ones(len(normals_z))
     epsilon_array = epsilon * np.ones(len(normals_z), dtype=np.float32)
@@ -95,19 +108,27 @@ def compute_descriptors(
         all_descriptors["verticality"] = verticality
 
     if "linearity" in descriptors:
-        linearity = 1 - (lambda_2 / (lambda_1 + epsilon_array))
+        linearity = 1 - (L_2 / (L_1 + epsilon_array))
         all_descriptors["linearity"] = linearity
 
     if "planarity" in descriptors:
-        planarity = (lambda_2 - lambda_3) / (lambda_1 + epsilon_array)
+        planarity = (L_2 - L_3) / (L_1 + epsilon_array)
         all_descriptors["planarity"] = planarity
 
     if "sphericity" in descriptors:
-        sphericity = lambda_3 / (lambda_1 + epsilon_array)
+        sphericity = L_3 / (L_1 + epsilon_array)
         all_descriptors["sphericity"] = sphericity
 
     if "curvature" in descriptors:
-        curvature = lambda_3 / (lambda_1 + lambda_2 + lambda_3 + epsilon_array)
+        curvature = L_3 / (L_1 + L_2 + L_3 + epsilon_array)
         all_descriptors["curvature"] = curvature
+
+    if "anisotropy" in descriptors:
+        anisotropy = (L_1 - L_3) / (L_1 + epsilon_array)
+        all_descriptors["anisotropy"] = anisotropy
+
+    if "surface_variation" in descriptors:
+        surface_variation = L_3 / (L_1 + L_3 + L_3 + epsilon_array)
+        all_descriptors["surface_variation"] = surface_variation
 
     return all_descriptors

@@ -61,21 +61,3 @@ def convert_labels(labels):
     """
     LABELS_MAP = {0: -1, 1: 0, 2: 0, 3: -1, 4: -1, 5: 1, 6: 2, 7: 3, 8: 3}
     return np.vectorize(LABELS_MAP.get)(labels)
-
-
-# if __name__ == "__main__":
-#     from torch.utils.data import DataLoader
-#     import time
-
-#     ds = AerialPointDataset("data/features/vaihingen3D_train.ply", 20)
-#     loader = DataLoader(ds, batch_size=32, num_workers=4, shuffle=True)
-
-#     print("start loading")
-#     now = time.time()
-#     for i, (x, y) in enumerate(loader):
-#         pass
-#     elapsed = time.time() - now
-#     print(elapsed)
-#     print(f"avg: {elapsed/ len(loader)}")
-
-#     print(len(loader))

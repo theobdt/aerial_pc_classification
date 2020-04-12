@@ -3,6 +3,8 @@ from sklearn.neighbors import KDTree
 from scipy import spatial
 from tqdm import tqdm
 
+METHODS_RASTERIZATION = ["closest_neighbor", "delaunay"]
+
 
 def stitch_regions(
     coords, region_labels, slope_intra_max, slope_inter_max, percentile_closest
@@ -122,6 +124,8 @@ def interpolate_altitude(coords_ground, coords_queries_xy, method="delaunay"):
 def rasterize_ground(coords, ground_mask, step_size, method):
     print(f"* method : {method}")
     print(f"* step_size : {step_size}")
+    assert method in METHODS_RASTERIZATION
+
     mins = np.min(coords[:, :2], axis=0)
     maxs = np.max(coords[:, :2], axis=0)
 
