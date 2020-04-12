@@ -42,11 +42,6 @@ parser.add_argument(
     "--batch_size", type=int, default=1000, help="Batch size",
 )
 parser.add_argument(
-    "--weighted_avg",
-    action="store_true",
-    help="Average metrics with support as weight",
-)
-parser.add_argument(
     "--num_workers",
     type=int,
     default=4,
@@ -116,32 +111,29 @@ def predict(loader, len_dataset):
     return predictions.cpu().numpy()
 
 
-def evaluate(y_true, y_pred, names, weighted_avg=False):
+def evaluate(y_true, y_pred, names):
     labels = np.arange(len(names))
 
     cm = skm.confusion_matrix(y_true, y_pred, labels=labels)
     totals = np.sum(cm, axis=1)
     cm = np.hstack((cm, totals.reshape(-1, 1)))
-    cm = np.vstack((cm, np.sum(cm, axis=0, keepdims=True)))
+    totals_cols = np.sum(cm, axis=0, keepdims=True)
+    cm = np.vstack((cm, totals_cols, totals_cols))
 
     metrics = skm.precision_recall_fscore_support(
         y_true, y_pred, labels=labels
     )
-    metrics = np.vstack(metrics[:-1]).T
-    if weighted_avg:
-        avg_metrics = totals @ metrics / np.sum(totals)
-        name_last_row = "Total/Weighted Avg"
-    else:
-        avg_metrics = np.mean(metrics, axis=0)
-        name_last_row = "Total/Avg"
-    metrics = np.vstack((metrics, avg_metrics))
+    metrics = 100 * np.vstack(metrics[:-1]).T
+    avg_metrics = np.mean(metrics, axis=0)
+    weighted_avg_metrics = totals @ metrics / np.sum(totals)
+    metrics = np.vstack((metrics, avg_metrics, weighted_avg_metrics))
 
     all_data = np.hstack((cm, metrics))
 
     cols_int = names + ["Total"]
     cols_float = ["Precision", "Recall", "F1-score"]
 
-    idx = names + [name_last_row]
+    idx = names + ["Total/Avg", "Total/Weighted Avg"]
     df = pd.DataFrame(data=all_data, columns=cols_int + cols_float, index=idx)
     df[cols_int] = df[cols_int].astype(int)
     return df
@@ -157,13 +149,11 @@ def write_metrics(path_prediction, filename, df):
     print(path_tex)
 
     # write tex file
-    column_format = "|l|" + df.shape[1] * "r|"
+    column_format = "|l|" + (df.shape[1] - 4) * "r|" + "|r||r|r|r|"
     with open(path_tex, "w") as f:
         f.write(
             df.to_latex(
-                bold_rows=True,
-                float_format="{:0.2f}".format,
-                column_format=column_format,
+                float_format="{:0.2f}".format, column_format=column_format,
             )
         )
 
@@ -210,11 +200,5 @@ for path_ply in args.files:
     if dict2ply(data, path_prediction):
         print(f"* Predictions PLY file saved to: {path_prediction}")
 
-    df = evaluate(
-        true_labels[true_labels >= 0],
-        raw_predictions,
-        names,
-        args.weighted_avg,
-    )
+    df = evaluate(true_labels[true_labels >= 0], raw_predictions, names)
     write_metrics(ckpt_prediction_folder, filename, df)
-    print(df)
