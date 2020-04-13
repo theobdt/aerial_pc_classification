@@ -2,6 +2,8 @@
 This repository is our project for the course [Point Cloud for 3D Modeling (NPM3D)](http://caor-mines-paristech.fr/fr/cours-npm3d/) of the [IASD master program](https://www.lamsade.dauphine.fr/wp/iasd/en/).
 This implementation is strongly inspired from the paper [classification of aerial point clouds with deep learning ](https://www.int-arch-photogramm-remote-sens-spatial-inf-sci.net/XLII-2-W13/103/2019/isprs-archives-XLII-2-W13-103-2019.pdf) by Emre Özdemir and Fabio Remondino.
 
+Our project report is available at the following link : https://www.overleaf.com/read/tdjgnxjbcmpg
+
 ## Installation
 This project requires python >= 3.5
 
