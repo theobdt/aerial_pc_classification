@@ -42,7 +42,7 @@ Parameters used for features extraction are stored in `cfg/config_features_extra
 Output files will be saved in `data/features/`.
 
 Available steps are : 
-1. Local descriptors (`descriptors`)
+1. Local descriptors (`descriptors`). A few examples :
 ![normals train](imgs/normals_train.jpg)*Normal angles to vertical axis*
 ![sphericity train](imgs/sphericity_train.jpg)*Sphericity*
 ![planarity train](imgs/planarity_train.jpg)*Planarity*
@@ -90,3 +90,9 @@ $ python3 test.py -f data/features/vaihingen3D_test.ply --ckpt ckpts/2020-04-10_
 A new folder will be created at `data/predictions/[model timestamp]`, along with a comprehensive metrics table.
 ![labels_test](imgs/labels_test.jpg)*9-classes test set*
 ![predictions_test](imgs/predictions_test.jpg)*9-classes predictions on test set*
+
+
+
+
+
+![confusion_matrix](imgs/confusion_matrix.png)*Confusion matrix and metrics*
